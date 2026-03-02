@@ -4,6 +4,7 @@ import { env } from './config.js';
 import { initDb } from './db.js';
 import authRoutes from './routes/auth.js';
 import gameRoutes from './routes/game.js';
+import gamesRoutes from './routes/games.js';
 
 const app = express();
 
@@ -16,6 +17,7 @@ app.get('/health', (_req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/game', gameRoutes);
+app.use('/api/games', gamesRoutes);
 
 app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(error);

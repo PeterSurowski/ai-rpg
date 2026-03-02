@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import './App.css';
 import ProtectedRoute from './ProtectedRoute';
+import CharacterSetupPage from './pages/CharacterSetupPage';
 import GamePage from './pages/GamePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -16,6 +17,14 @@ function App() {
         element={
           <ProtectedRoute>
             <StorylinePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/game/city-of-doors/setup"
+        element={
+          <ProtectedRoute>
+            <CharacterSetupPage />
           </ProtectedRoute>
         }
       />

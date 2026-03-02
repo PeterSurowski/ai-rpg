@@ -77,20 +77,42 @@
   font-weight: 600;
 }
 
-.storyline-column {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.story-card {
+.dropzone {
   width: 100%;
-  text-align: left;
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   border: 1px solid #334169;
   border-radius: 12px;
   background: #131d38;
   color: #f5f7ff;
   padding: 1rem;
+  cursor: pointer;
+}
+
+.dropzone.dragging {
+  border-color: #8eb5ff;
+}
+
+.hidden-input {
+  display: none;
+}
+
+.character-block {
+  border: 1px solid #334169;
+  border-radius: 12px;
+  background: #131d38;
+  padding: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.character-block h2 {
+  margin: 0;
+  font-size: 1rem;
 }
 
 .game-layout {

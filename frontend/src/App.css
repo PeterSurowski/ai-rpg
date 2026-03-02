@@ -1,0 +1,146 @@
+.screen {
+  width: 100%;
+  min-height: 100vh;
+  max-width: 430px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.auth-screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.with-nav {
+  display: flex;
+  flex-direction: column;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+}
+
+.brand {
+  color: #f5f7ff;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.link-button {
+  border: none;
+  background: transparent;
+  color: #8eb5ff;
+  font-size: 0.95rem;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  flex: 1;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.field input,
+.field textarea {
+  border: 1px solid #334169;
+  border-radius: 10px;
+  background: #131d38;
+  color: #f5f7ff;
+  padding: 0.7rem;
+  font-size: 1rem;
+}
+
+.primary {
+  border: none;
+  border-radius: 10px;
+  padding: 0.8rem;
+  background: #4d76ff;
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.storyline-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.story-card {
+  width: 100%;
+  text-align: left;
+  border: 1px solid #334169;
+  border-radius: 12px;
+  background: #131d38;
+  color: #f5f7ff;
+  padding: 1rem;
+}
+
+.game-layout {
+  min-height: 0;
+}
+
+.log {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 42vh;
+  padding-right: 0.25rem;
+}
+
+.bubble {
+  border-radius: 12px;
+  padding: 0.75rem;
+}
+
+.bubble.assistant {
+  background: #1b2850;
+  border: 1px solid #34447a;
+}
+
+.bubble.user {
+  background: #283156;
+  border: 1px solid #46558c;
+}
+
+.bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.action-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin-top: 0.5rem;
+}
+
+.auth-footnote,
+.status,
+.error {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.error {
+  color: #ff9ca6;
+}

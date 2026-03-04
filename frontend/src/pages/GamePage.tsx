@@ -1,19 +1,33 @@
-import { FormEvent, useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { Navigate, useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { api } from '../api';
-import { getCharacterSetup } from '../characterSetup';
 import { HistoryMessage } from '../types';
 
+type PlayResponse = {
+  sceneId: string;
+  sceneTitle: string;
+  text: string;
+  backgroundImageUrl: string | null;
+  ended: boolean;
+};
+
 export default function GamePage() {
-  const characters = getCharacterSetup();
+  const { gameId } = useParams<{ gameId: string }>();
   const [history, setHistory] = useState<HistoryMessage[]>([]);
+  const [sceneId, setSceneId] = useState('');
+  const [sceneTitle, setSceneTitle] = useState('');
+  const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | null>(null);
+  const [ended, setEnded] = useState(false);
   const [action, setAction] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showRestartModal, setShowRestartModal] = useState(false);
+  const logRef = useRef<HTMLDivElement>(null);
+  const scrollAnimationRef = useRef<number | null>(null);
 
-  if (!characters) {
-    return <Navigate to="/game/city-of-doors/setup" replace />;
+  if (!gameId) {
+    return <Navigate to="/storylines" replace />;
   }
 
   useEffect(() => {
@@ -21,24 +35,71 @@ export default function GamePage() {
       setLoading(true);
       setError('');
       try {
-        const response = await api.post('/game/start', {
-          storyline: 'City of Doors',
-          characters
-        });
+        const response = await api.post<PlayResponse>(`/games/${gameId}/play/start`, {});
+        setSceneId(response.data.sceneId);
+        setSceneTitle(response.data.sceneTitle);
+        setBackgroundImageUrl(response.data.backgroundImageUrl);
+        setEnded(response.data.ended);
         setHistory([{ role: 'assistant', content: response.data.text }]);
       } catch {
-        setError('Could not start the storyline.');
+        setError('Could not start this game.');
       } finally {
         setLoading(false);
       }
     };
 
     void start();
-  }, [characters]);
+  }, [gameId]);
+
+  useEffect(() => {
+    const logElement = logRef.current;
+    if (!logElement) {
+      return;
+    }
+
+    if (scrollAnimationRef.current !== null) {
+      cancelAnimationFrame(scrollAnimationRef.current);
+      scrollAnimationRef.current = null;
+    }
+
+    const startTop = logElement.scrollTop;
+    const targetTop = logElement.scrollHeight - logElement.clientHeight;
+    const distance = targetTop - startTop;
+
+    if (distance <= 0) {
+      return;
+    }
+
+    const durationMs = 650;
+    const startTime = performance.now();
+
+    const animate = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / durationMs, 1);
+      const easedProgress = 1 - Math.pow(1 - progress, 3);
+
+      logElement.scrollTop = startTop + distance * easedProgress;
+
+      if (progress < 1) {
+        scrollAnimationRef.current = requestAnimationFrame(animate);
+      } else {
+        scrollAnimationRef.current = null;
+      }
+    };
+
+    scrollAnimationRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (scrollAnimationRef.current !== null) {
+        cancelAnimationFrame(scrollAnimationRef.current);
+        scrollAnimationRef.current = null;
+      }
+    };
+  }, [history, loading]);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!action.trim() || loading) {
+    if (!action.trim() || loading || !sceneId || ended) {
       return;
     }
 
@@ -50,26 +111,93 @@ export default function GamePage() {
     setError('');
 
     try {
-      const response = await api.post('/game/continue', {
-        storyline: 'City of Doors',
-        action: userAction,
-        history: nextHistory,
-        characters
+      const response = await api.post<PlayResponse>(`/games/${gameId}/play/action`, {
+        sceneId,
+        input: userAction
       });
+
+      setSceneId(response.data.sceneId);
+      setSceneTitle(response.data.sceneTitle);
+      setBackgroundImageUrl(response.data.backgroundImageUrl);
+      setEnded(response.data.ended);
       setHistory((prev) => [...prev, { role: 'assistant', content: response.data.text }]);
     } catch {
-      setError('Could not continue the adventure.');
+      setError('Could not process your action.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onActionKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
+  };
+
+  const onHint = async () => {
+    if (loading || !sceneId || ended) {
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const response = await api.post<PlayResponse>(`/games/${gameId}/play/action`, {
+        sceneId,
+        input: 'HINT'
+      });
+
+      setHistory((prev) => [...prev, { role: 'assistant', content: response.data.text }]);
+    } catch {
+      setError('Could not fetch a hint right now.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onConfirmRestart = async () => {
+    if (loading) {
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const response = await api.post<PlayResponse>(`/games/${gameId}/play/restart`, {});
+      setSceneId(response.data.sceneId);
+      setSceneTitle(response.data.sceneTitle);
+      setBackgroundImageUrl(response.data.backgroundImageUrl);
+      setEnded(response.data.ended);
+      setHistory([{ role: 'assistant', content: response.data.text }]);
+      setAction('');
+      setShowRestartModal(false);
+    } catch {
+      setError('Could not restart this game.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="screen with-nav">
-      <Navbar />
-      <section className="content game-layout">
-        <h1>City of Doors</h1>
-        <div className="log">
+    <main className="screen with-nav game-screen">
+      <Navbar onRestart={() => setShowRestartModal(true)} />
+      <section
+        className="content game-layout"
+        style={
+          backgroundImageUrl
+            ? {
+                backgroundImage: `linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.65)), url(${backgroundImageUrl})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                borderRadius: '12px',
+                padding: '0.75rem'
+              }
+            : { backgroundColor: '#000', borderRadius: '12px', padding: '0.75rem' }
+        }
+      >
+        <h1>{sceneTitle || 'Game'}</h1>
+        <div className="log" ref={logRef}>
           {history.map((item, index) => (
             <article key={`${item.role}-${index}`} className={`bubble ${item.role}`}>
               <p>{item.content}</p>
@@ -84,16 +212,41 @@ export default function GamePage() {
             <textarea
               value={action}
               onChange={(event) => setAction(event.target.value)}
+              onKeyDown={onActionKeyDown}
               rows={3}
-              placeholder="Ex: Open the brass door and listen first."
+              placeholder="Type your action, or tap Hint."
+              disabled={ended}
             />
           </label>
           {error && <p className="error">{error}</p>}
-          <button className="primary" type="submit" disabled={loading}>
+          {ended && <p className="status">This path has reached an ending.</p>}
+          <div className="action-row">
+            <button className="ghost" type="button" onClick={onHint} disabled={loading || ended}>
+              Hint
+            </button>
+            <button className="primary" type="submit" disabled={loading || ended}>
             Send action
-          </button>
+            </button>
+          </div>
         </form>
       </section>
+
+      {showRestartModal && (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal" role="dialog" aria-modal="true" aria-labelledby="restart-title">
+            <h2 id="restart-title">Restart game?</h2>
+            <p>Are you sure you want to restart the game? This action is irreversible and all progress will be lost.</p>
+            <div className="modal-actions">
+              <button className="primary" type="button" onClick={onConfirmRestart} disabled={loading}>
+                Yes, I&apos;m sure.
+              </button>
+              <button className="ghost" type="button" onClick={() => setShowRestartModal(false)} disabled={loading}>
+                Cancel
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

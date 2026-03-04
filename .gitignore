@@ -15,6 +15,8 @@ frontend/.env
 
 # Local database and runtime data
 backend/data/
+backend/data/users/*/games/
+backend/data/users/*/games/**
 *.sqlite
 *.sqlite3
 

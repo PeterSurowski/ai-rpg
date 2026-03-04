@@ -21,7 +21,7 @@ function App() {
         }
       />
       <Route
-        path="/game/city-of-doors/setup"
+        path="/games/:gameId/players"
         element={
           <ProtectedRoute>
             <CharacterSetupPage />
@@ -29,7 +29,7 @@ function App() {
         }
       />
       <Route
-        path="/game/city-of-doors"
+        path="/games/:gameId/play"
         element={
           <ProtectedRoute>
             <GamePage />

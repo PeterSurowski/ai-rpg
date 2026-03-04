@@ -1,7 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { clearToken } from '../auth';
 
-export default function Navbar() {
+type NavbarProps = {
+  onRestart?: () => void;
+};
+
+export default function Navbar({ onRestart }: NavbarProps) {
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -14,9 +18,16 @@ export default function Navbar() {
       <Link to="/storylines" className="brand">
         AI RPG
       </Link>
-      <button className="link-button" onClick={handleLogout} type="button">
-        Logout
-      </button>
+      <div className="nav-actions">
+        {onRestart && (
+          <button className="link-button" onClick={onRestart} type="button">
+            Restart
+          </button>
+        )}
+        <button className="link-button" onClick={handleLogout} type="button">
+          Logout
+        </button>
+      </div>
     </header>
   );
 }

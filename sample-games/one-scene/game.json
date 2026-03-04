@@ -1,0 +1,32 @@
+{
+  "id": "cell_escape_demo",
+  "title": "The City of Doors",
+  "description": "You discover a strange door you've never noticed before. Once you go through it, the world is not quite right. Soon you realize you're far from home in a world that looks deciptively like your own, in a city full of doors that lead to strange, dreamlike realities. And only one leads back to your home.",
+  "startSceneId": "the_cell",
+  "randomGroups": {},
+  "scenes": {
+    "the_cell": {
+      "title": "The Cell",
+      "basePrompt": "You are trapped in a stone jail cell. The room has a bed, a chamber pot, and a bottle of water. Distant snoring echoes from a hallway beyond the locked cell door.",
+      "onFreeformPrompt": "Respond to the action naturally but do not allow escape yet. Keep response between 1 and 5 sentences.",
+      "exitVectors": [
+        {
+          "id": "lockpick_escape",
+          "intent": "Find lock pick under the chamber pot and pick the lock",
+          "hint": "Check the least pleasant object in the room. Something small is hidden there.",
+          "matchExamples": [
+            "look under chamber pot",
+            "search under the pot",
+            "take lock pick",
+            "pick the lock",
+            "unlock the cell door with lock pick"
+          ],
+          "next": {
+            "type": "end",
+            "endingText": "You slip through the cell door into the hallway, unseen for now."
+          }
+        }
+      ]
+    }
+  }
+}

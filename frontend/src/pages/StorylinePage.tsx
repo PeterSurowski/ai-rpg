@@ -1,14 +1,40 @@
-import { DragEvent, useRef, useState } from 'react';
+import { DragEvent, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { api } from '../api';
 
+type GameCard = {
+  id: string;
+  title: string;
+  description: string;
+  hasPlayers: boolean;
+};
+
 export default function StorylinePage() {
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [games, setGames] = useState<GameCard[]>([]);
+  const [loadingGames, setLoadingGames] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    const loadGames = async () => {
+      setLoadingGames(true);
+      try {
+        const response = await api.get<{ items: GameCard[] }>('/games');
+        setGames(response.data.items);
+      } catch {
+        setErrorMessage('Could not load your games right now.');
+      } finally {
+        setLoadingGames(false);
+      }
+    };
+
+    void loadGames();
+  }, []);
 
   const setFile = (file: File | null) => {
     if (!file) {
@@ -23,7 +49,6 @@ export default function StorylinePage() {
     }
 
     setErrorMessage('');
-    setStatusMessage('');
     setSelectedFile(file);
   };
 
@@ -50,7 +75,6 @@ export default function StorylinePage() {
 
     setIsUploading(true);
     setErrorMessage('');
-    setStatusMessage('');
 
     const formData = new FormData();
     formData.append('gameZip', selectedFile);
@@ -59,13 +83,14 @@ export default function StorylinePage() {
       const response = await api.post('/games/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      setStatusMessage(
-        `Upload complete. JSON files: ${response.data.jsonFiles}. WEBP files: ${response.data.webpFiles}.`
-      );
-      setSelectedFile(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      const uploadedGame: GameCard = {
+        id: response.data.gameId,
+        title: response.data.title,
+        description: response.data.description,
+        hasPlayers: false
+      };
+      setGames((prev) => [uploadedGame, ...prev]);
+      navigate(`/games/${response.data.gameId}/players`);
     } catch (error: any) {
       setErrorMessage(error?.response?.data?.message ?? 'Upload failed.');
     } finally {
@@ -77,7 +102,23 @@ export default function StorylinePage() {
     <main className="screen with-nav">
       <Navbar />
       <section className="content">
-        <h1>Upload a new game to start playing.</h1>
+        <div className="game-cards">
+          {loadingGames && <p className="status">Loading your games…</p>}
+          {!loadingGames && games.length === 0 && <p className="status">No games uploaded yet.</p>}
+          {games.map((game) => (
+            <button
+              key={game.id}
+              type="button"
+              className="game-card"
+              onClick={() => navigate(game.hasPlayers ? `/games/${game.id}/play` : `/games/${game.id}/players`)}
+            >
+              <h2>{game.title}</h2>
+              <p>{game.description}</p>
+            </button>
+          ))}
+        </div>
+
+        <h2 className="subtle-headline">Upload a new game to start playing.</h2>
         <div
           className={`dropzone ${isDragging ? 'dragging' : ''}`}
           onDrop={onDrop}
@@ -99,7 +140,6 @@ export default function StorylinePage() {
         <button className="primary" type="button" onClick={uploadGame} disabled={!selectedFile || isUploading}>
           {isUploading ? 'Uploading…' : 'Upload game zip'}
         </button>
-        {statusMessage && <p className="status">{statusMessage}</p>}
         {errorMessage && <p className="error">{errorMessage}</p>}
       </section>
     </main>

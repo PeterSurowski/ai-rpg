@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
-import { saveCharacterSetup } from '../characterSetup';
+import { api } from '../api';
 import { StoryCharacters } from '../types';
 
 const MIN_PARAGRAPH_LENGTH = 120;
@@ -20,12 +20,22 @@ const emptyCharacters: StoryCharacters = {
 };
 
 export default function CharacterSetupPage() {
+  const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
   const [characters, setCharacters] = useState<StoryCharacters>(emptyCharacters);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const onSubmit = (event: FormEvent) => {
+  if (!gameId) {
+    return <Navigate to="/storylines" replace />;
+  }
+
+  const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (loading) {
+      return;
+    }
+
     setError('');
 
     const playerBackground = characters.player.background.trim();
@@ -59,8 +69,15 @@ export default function CharacterSetupPage() {
       }
     };
 
-    saveCharacterSetup(payload);
-    navigate('/game/city-of-doors');
+    setLoading(true);
+    try {
+      await api.post(`/games/${gameId}/players`, payload);
+      navigate(`/games/${gameId}/play`, { replace: true });
+    } catch (requestError: any) {
+      setError(requestError?.response?.data?.message ?? 'Could not save player information.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -144,8 +161,8 @@ export default function CharacterSetupPage() {
           </section>
 
           {error && <p className="error">{error}</p>}
-          <button className="primary" type="submit">
-            Begin City of Doors
+          <button className="primary" type="submit" disabled={loading}>
+            {loading ? 'Saving…' : 'Save player information'}
           </button>
         </form>
       </section>

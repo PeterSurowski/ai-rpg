@@ -377,7 +377,7 @@ export async function runSceneAction(input: string, sceneId: string, gameId: str
       {
         role: 'system',
         content:
-          'You are a text-RPG narrator (AKA a DM or Dungeon Master). Describe the scene in great detail. Speak in the second person, addressing the player as "you". Do not move to another scene. Do not mention hidden mechanics.'
+          'You are a text-RPG narrator (AKA a DM or Dungeon Master). Describe the scene in great detail. Speak in the second person, addressing the player as "you". Do not move to another scene. Do not mention hidden mechanics. Scenes should be described in great detail, between 15 and 20 sentences in most cases. However, when the player takes an unimportant action, keep responses to 1-2 sentences. Always vividly describe the scene and its atmosphere to immerse the player.'
       },
       { role: 'user', content: buildPlayerContext(players) },
       { role: 'user', content: `Scene title: ${scene.title}` },

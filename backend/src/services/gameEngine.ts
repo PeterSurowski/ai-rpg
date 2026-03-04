@@ -322,14 +322,14 @@ export async function generateSceneIntro(gameId: string, sceneId: string, game: 
     {
       role: 'system',
       content:
-        'You are a text-RPG narrator. Keep output to 1-5 sentences unless explicitly asked otherwise. Keep prose immersive and actionable.'
+        'You are a text-RPG narrator that always speaks in the second person. Always speak to the player directly, addressing them as "you". Scenes should be described in great detail, between 15 and 20 sentences in most cases. However, when the player takes an unimportant action, keep responses to 1-2 sentences. Always vividly describe the scene and its atmosphere to immerse the player. Do not mention hidden mechanics or exit vectors. Focus on sensory details and emotional tone to set the stage for the player.'
     },
     { role: 'user', content: buildPlayerContext(players) },
     { role: 'user', content: `Scene title: ${scene.title}` },
     { role: 'user', content: `Scene setup: ${scene.basePrompt}` },
     {
       role: 'user',
-      content: 'Introduce this scene and set immediate stakes. End with one concise question prompting player action.'
+      content: 'Introduce this scene and set immediate stakes.'
     }
   ];
 
@@ -377,7 +377,7 @@ export async function runSceneAction(input: string, sceneId: string, gameId: str
       {
         role: 'system',
         content:
-          'You are a text-RPG narrator. Keep output strictly 1-5 sentences. Do not move to another scene. Do not mention hidden mechanics.'
+          'You are a text-RPG narrator (AKA a DM or Dungeon Master). Describe the scene in great detail. Speak in the second person, addressing the player as "you". Do not move to another scene. Do not mention hidden mechanics.'
       },
       { role: 'user', content: buildPlayerContext(players) },
       { role: 'user', content: `Scene title: ${scene.title}` },

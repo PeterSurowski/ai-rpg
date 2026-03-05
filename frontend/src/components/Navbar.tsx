@@ -3,9 +3,12 @@ import { clearToken } from '../auth';
 
 type NavbarProps = {
   onRestart?: () => void;
+  onToggleImageView?: () => void;
+  imageOnlyView?: boolean;
+  canToggleImageView?: boolean;
 };
 
-export default function Navbar({ onRestart }: NavbarProps) {
+export default function Navbar({ onRestart, onToggleImageView, imageOnlyView = false, canToggleImageView = true }: NavbarProps) {
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -22,6 +25,11 @@ export default function Navbar({ onRestart }: NavbarProps) {
         {onRestart && (
           <button className="link-button" onClick={onRestart} type="button">
             Restart
+          </button>
+        )}
+        {onToggleImageView && (
+          <button className="link-button" onClick={onToggleImageView} type="button" disabled={!canToggleImageView}>
+            {imageOnlyView ? 'Hide image' : 'See image'}
           </button>
         )}
         <button className="link-button" onClick={handleLogout} type="button">

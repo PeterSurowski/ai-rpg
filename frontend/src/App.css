@@ -225,6 +225,15 @@
   opacity: 1;
 }
 
+.image-only-view .scene-ui {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.image-only-view .scene-bg-layer {
+  opacity: 1;
+}
+
 .log {
   display: flex;
   flex-direction: column;

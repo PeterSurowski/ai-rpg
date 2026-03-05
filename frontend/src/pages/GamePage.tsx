@@ -23,6 +23,7 @@ export default function GamePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showRestartModal, setShowRestartModal] = useState(false);
+  const [imageOnlyView, setImageOnlyView] = useState(false);
   const [revealStage, setRevealStage] = useState<'hidden' | 'image' | 'content'>('content');
   const logRef = useRef<HTMLDivElement>(null);
   const scrollAnimationRef = useRef<number | null>(null);
@@ -64,10 +65,22 @@ export default function GamePage() {
     }
 
     const startTop = logElement.scrollTop;
-    const targetTop = logElement.scrollHeight - logElement.clientHeight;
+    const userBubbles = logElement.querySelectorAll<HTMLElement>('article.bubble.user');
+    const lastUserBubble = userBubbles[userBubbles.length - 1];
+
+    let targetTop = logElement.scrollHeight - logElement.clientHeight;
+    if (lastUserBubble) {
+      const logRect = logElement.getBoundingClientRect();
+      const userRect = lastUserBubble.getBoundingClientRect();
+      targetTop = logElement.scrollTop + (userRect.top - logRect.top);
+    }
+
+    const maxScrollTop = Math.max(0, logElement.scrollHeight - logElement.clientHeight);
+    targetTop = Math.min(Math.max(targetTop, 0), maxScrollTop);
+
     const distance = targetTop - startTop;
 
-    if (distance <= 0) {
+    if (Math.abs(distance) < 1) {
       return;
     }
 
@@ -120,6 +133,12 @@ export default function GamePage() {
       }
     };
   }, [backgroundImageUrl, sceneId]);
+
+  useEffect(() => {
+    if (!backgroundImageUrl) {
+      setImageOnlyView(false);
+    }
+  }, [backgroundImageUrl]);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -211,14 +230,21 @@ export default function GamePage() {
         : 'has-bg-image'
     : 'content-visible';
 
+  const displayClass = imageOnlyView ? `${revealClass} image-only-view` : revealClass;
+
   const sectionStyle = backgroundImageUrl
     ? ({ '--scene-bg-image': `url(${backgroundImageUrl})` } as CSSProperties)
     : undefined;
 
   return (
     <main className="screen with-nav game-screen">
-      <Navbar onRestart={() => setShowRestartModal(true)} />
-      <section className={`content game-layout ${revealClass}`} style={sectionStyle}>
+      <Navbar
+        onRestart={() => setShowRestartModal(true)}
+        onToggleImageView={() => setImageOnlyView((prev) => !prev)}
+        imageOnlyView={imageOnlyView}
+        canToggleImageView={Boolean(backgroundImageUrl)}
+      />
+      <section className={`content game-layout ${displayClass}`} style={sectionStyle}>
         <div className="scene-bg-layer" aria-hidden="true" />
         <div className="scene-ui">
           <h1>{sceneTitle || 'Game'}</h1>

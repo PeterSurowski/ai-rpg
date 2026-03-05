@@ -247,6 +247,20 @@ function resolveBackgroundUrl(gameId: string, backgroundImage?: string) {
 
 function resolveNextSceneId(next: z.infer<typeof nextSchema>, game: GameDefinition) {
   if (next.type === 'scene') {
+    if (next.sceneId.startsWith('randomscene-')) {
+      const aliasPrefix = `${next.sceneId}-`;
+      const pool = Object.keys(game.scenes).filter((sceneKey) => sceneKey.startsWith(aliasPrefix));
+
+      if (pool.length === 0) {
+        throw new Error(
+          `Random scene alias '${next.sceneId}' has no matching scenes. Expected scenes prefixed like '${aliasPrefix}*'.`
+        );
+      }
+
+      const randomIndex = Math.floor(Math.random() * pool.length);
+      return pool[randomIndex];
+    }
+
     return next.sceneId;
   }
 

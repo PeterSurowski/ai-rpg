@@ -348,11 +348,30 @@ router.get('/:gameId/assets/*assetPath', requireAuth, async (req, res) => {
     return res.status(400).json({ message: 'Invalid asset path.' });
   }
 
-  if (!fs.existsSync(fullPath) || !fs.statSync(fullPath).isFile()) {
+  let resolvedFilePath = fullPath;
+  if (!fs.existsSync(resolvedFilePath) || !fs.statSync(resolvedFilePath).isFile()) {
+    const ext = path.extname(fullPath).toLowerCase();
+    const extFallbackOrder = ['.webp', '.png', '.jpg', '.jpeg'];
+    const basenameWithoutExt = ext ? fullPath.slice(0, -ext.length) : fullPath;
+
+    for (const candidateExt of extFallbackOrder) {
+      if (candidateExt === ext) {
+        continue;
+      }
+
+      const candidatePath = `${basenameWithoutExt}${candidateExt}`;
+      if (candidatePath.startsWith(resolvedBase) && fs.existsSync(candidatePath) && fs.statSync(candidatePath).isFile()) {
+        resolvedFilePath = candidatePath;
+        break;
+      }
+    }
+  }
+
+  if (!fs.existsSync(resolvedFilePath) || !fs.statSync(resolvedFilePath).isFile()) {
     return res.status(404).json({ message: 'Asset not found.' });
   }
 
-  return res.sendFile(fullPath);
+  return res.sendFile(resolvedFilePath);
 });
 
 export default router;

@@ -18,6 +18,7 @@ export default function GamePage() {
   const [sceneId, setSceneId] = useState('');
   const [sceneTitle, setSceneTitle] = useState('');
   const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | null>(null);
+  const [sceneBackStack, setSceneBackStack] = useState<string[]>([]);
   const [ended, setEnded] = useState(false);
   const [action, setAction] = useState('');
   const [loading, setLoading] = useState(false);
@@ -41,6 +42,7 @@ export default function GamePage() {
         setSceneId(response.data.sceneId);
         setSceneTitle(response.data.sceneTitle);
         setBackgroundImageUrl(response.data.backgroundImageUrl);
+        setSceneBackStack([]);
         setEnded(response.data.ended);
         setHistory([{ role: 'assistant', content: response.data.text }]);
       } catch {
@@ -162,6 +164,9 @@ export default function GamePage() {
       setSceneId(response.data.sceneId);
       setSceneTitle(response.data.sceneTitle);
       setBackgroundImageUrl(response.data.backgroundImageUrl);
+      if (response.data.sceneId !== sceneId) {
+        setSceneBackStack((prev) => [...prev, sceneId]);
+      }
       setEnded(response.data.ended);
       setHistory((prev) => [...prev, { role: 'assistant', content: response.data.text }]);
     } catch {
@@ -211,12 +216,38 @@ export default function GamePage() {
       setSceneId(response.data.sceneId);
       setSceneTitle(response.data.sceneTitle);
       setBackgroundImageUrl(response.data.backgroundImageUrl);
+      setSceneBackStack([]);
       setEnded(response.data.ended);
       setHistory([{ role: 'assistant', content: response.data.text }]);
       setAction('');
       setShowRestartModal(false);
     } catch {
       setError('Could not restart this game.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onBack = async () => {
+    if (loading || sceneBackStack.length === 0) {
+      return;
+    }
+
+    const targetSceneId = sceneBackStack[sceneBackStack.length - 1];
+    setLoading(true);
+    setError('');
+    try {
+      const response = await api.post<PlayResponse>(`/games/${gameId}/play/start`, { sceneId: targetSceneId });
+      setSceneId(response.data.sceneId);
+      setSceneTitle(response.data.sceneTitle);
+      setBackgroundImageUrl(response.data.backgroundImageUrl);
+      setEnded(response.data.ended);
+      setHistory([{ role: 'assistant', content: response.data.text }]);
+      setAction('');
+      setImageOnlyView(false);
+      setSceneBackStack((prev) => prev.slice(0, -1));
+    } catch {
+      setError('Could not go back to the previous scene.');
     } finally {
       setLoading(false);
     }
@@ -239,6 +270,8 @@ export default function GamePage() {
   return (
     <main className="screen with-nav game-screen">
       <Navbar
+        onBack={onBack}
+        canGoBack={sceneBackStack.length > 0}
         onRestart={() => setShowRestartModal(true)}
         onToggleImageView={() => setImageOnlyView((prev) => !prev)}
         imageOnlyView={imageOnlyView}

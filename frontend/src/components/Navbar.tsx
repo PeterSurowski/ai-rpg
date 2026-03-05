@@ -2,13 +2,22 @@ import { Link, useNavigate } from 'react-router-dom';
 import { clearToken } from '../auth';
 
 type NavbarProps = {
+  onBack?: () => void;
+  canGoBack?: boolean;
   onRestart?: () => void;
   onToggleImageView?: () => void;
   imageOnlyView?: boolean;
   canToggleImageView?: boolean;
 };
 
-export default function Navbar({ onRestart, onToggleImageView, imageOnlyView = false, canToggleImageView = true }: NavbarProps) {
+export default function Navbar({
+  onBack,
+  canGoBack = false,
+  onRestart,
+  onToggleImageView,
+  imageOnlyView = false,
+  canToggleImageView = true
+}: NavbarProps) {
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -22,6 +31,11 @@ export default function Navbar({ onRestart, onToggleImageView, imageOnlyView = f
         AI RPG
       </Link>
       <div className="nav-actions">
+        {onBack && (
+          <button className="link-button" onClick={onBack} type="button" disabled={!canGoBack}>
+            Back
+          </button>
+        )}
         {onRestart && (
           <button className="link-button" onClick={onRestart} type="button">
             Restart

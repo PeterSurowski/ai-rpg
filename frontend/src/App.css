@@ -166,6 +166,11 @@
 
 .game-layout {
   min-height: 0;
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  padding: 0.75rem;
+  background-color: #000;
 }
 
 .game-screen {
@@ -178,9 +183,46 @@
 }
 
 .game-screen .game-layout {
+  overflow: hidden;
+}
+
+.game-layout > h1 {
+  font-size: 1rem;
+}
+
+.scene-bg-layer {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.has-bg-image .scene-bg-layer {
+  background-image: linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.65)), var(--scene-bg-image);
+}
+
+.bg-visible .scene-bg-layer {
+  opacity: 1;
+}
+
+.scene-ui {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  overflow: hidden;
+  min-height: 0;
+  opacity: 1;
+  transition: opacity 0.25s ease;
+}
+
+.has-bg-image .scene-ui {
+  opacity: 0;
+}
+
+.content-visible .scene-ui {
+  opacity: 1;
 }
 
 .log {
@@ -233,6 +275,14 @@
   border: 1px solid #46558c;
 }
 
+.has-bg-image .bubble.assistant {
+  background: rgba(27, 40, 80, 0.7);
+}
+
+.has-bg-image .bubble.user {
+  background: rgba(40, 49, 86, 0.7);
+}
+
 .bubble p {
   margin: 0;
   white-space: pre-wrap;
@@ -250,6 +300,16 @@
   grid-template-columns: 1fr 2fr;
   gap: 0.5rem;
 }
+
+.has-bg-image .field textarea {
+  background: rgba(19, 29, 56, 0.7);
+}
+
+.has-bg-image .action-row .primary {
+  background: rgba(19, 29, 56, 0.7);
+  border: 1px solid #4d76ff;
+}
+
 
 .auth-footnote,
 .status,

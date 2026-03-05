@@ -241,6 +241,10 @@ router.post('/:gameId/play/start', requireAuth, async (req, res) => {
     return res.status(404).json({ message: 'Game not found.' });
   }
 
+  const bearerToken = req.headers.authorization?.startsWith('Bearer ')
+    ? req.headers.authorization.replace('Bearer ', '')
+    : undefined;
+
   const requestedSceneId = parsed.data.sceneId;
   const savedSceneId = loaded.gameRecord.current_scene_id;
 
@@ -249,7 +253,7 @@ router.post('/:gameId/play/start', requireAuth, async (req, res) => {
 
   await run('UPDATE games SET current_scene_id = ? WHERE id = ? AND user_id = ?', [initialSceneId, gameId, userId]);
 
-  const response = await generateSceneIntro(gameId, initialSceneId, loaded.game, loaded.players);
+  const response = await generateSceneIntro(gameId, initialSceneId, loaded.game, loaded.players, bearerToken);
   return res.json(response);
 });
 
@@ -267,6 +271,10 @@ router.post('/:gameId/play/action', requireAuth, async (req, res) => {
     return res.status(404).json({ message: 'Game not found.' });
   }
 
+  const bearerToken = req.headers.authorization?.startsWith('Bearer ')
+    ? req.headers.authorization.replace('Bearer ', '')
+    : undefined;
+
   const savedSceneId = loaded.gameRecord.current_scene_id;
   if (savedSceneId && parsed.data.sceneId !== savedSceneId) {
     return res.status(409).json({
@@ -283,7 +291,8 @@ router.post('/:gameId/play/action', requireAuth, async (req, res) => {
     activeSceneId,
     gameId,
     loaded.game,
-    loaded.players
+    loaded.players,
+    bearerToken
   );
 
   await run('UPDATE games SET current_scene_id = ? WHERE id = ? AND user_id = ?', [response.sceneId, gameId, userId]);
@@ -300,6 +309,10 @@ router.post('/:gameId/play/restart', requireAuth, async (req, res) => {
     return res.status(404).json({ message: 'Game not found.' });
   }
 
+  const bearerToken = req.headers.authorization?.startsWith('Bearer ')
+    ? req.headers.authorization.replace('Bearer ', '')
+    : undefined;
+
   const restartSceneId = loaded.game.startSceneId;
   if (!loaded.game.scenes[restartSceneId]) {
     return res.status(400).json({ message: 'Game start scene is invalid.' });
@@ -307,7 +320,7 @@ router.post('/:gameId/play/restart', requireAuth, async (req, res) => {
 
   await run('UPDATE games SET current_scene_id = ? WHERE id = ? AND user_id = ?', [restartSceneId, gameId, userId]);
 
-  const response = await generateSceneIntro(gameId, restartSceneId, loaded.game, loaded.players);
+  const response = await generateSceneIntro(gameId, restartSceneId, loaded.game, loaded.players, bearerToken);
   return res.json(response);
 });
 
@@ -322,7 +335,9 @@ router.get('/:gameId/assets/*assetPath', requireAuth, async (req, res) => {
 
   const wildcardValue = req.params.assetPath;
   const rawAssetPath = Array.isArray(wildcardValue) ? wildcardValue.join('/') : String(wildcardValue ?? '');
-  const normalizedAssetPath = path.posix.normalize(rawAssetPath.replace(/\\/g, '/'));
+  const normalizedAssetPath = path.posix
+    .normalize(rawAssetPath.replace(/\\/g, '/'))
+    .replace(/^(?:assets|files)\//, '');
   if (!normalizedAssetPath || normalizedAssetPath.startsWith('/') || normalizedAssetPath.startsWith('..') || normalizedAssetPath.includes('../')) {
     return res.status(400).json({ message: 'Invalid asset path.' });
   }

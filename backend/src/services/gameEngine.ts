@@ -232,17 +232,20 @@ async function classifyExitWithVenice(
   }
 }
 
-function resolveBackgroundUrl(gameId: string, backgroundImage?: string) {
+function resolveBackgroundUrl(gameId: string, backgroundImage?: string, userToken?: string) {
   if (!backgroundImage) {
     return null;
   }
 
-  const normalized = path.posix.normalize(backgroundImage.replace(/\\/g, '/'));
+  const normalizedRaw = path.posix.normalize(backgroundImage.replace(/\\/g, '/'));
+  const normalized = normalizedRaw.replace(/^(?:assets|files)\//, '');
   if (normalized.startsWith('/') || normalized.startsWith('..') || normalized.includes('../')) {
     return null;
   }
 
-  return `/api/games/${gameId}/assets/${normalized}`;
+  const encodedPath = encodeURI(normalized);
+  const tokenSuffix = userToken ? `?token=${encodeURIComponent(userToken)}` : '';
+  return `/api/games/${gameId}/assets/${encodedPath}${tokenSuffix}`;
 }
 
 function resolveNextSceneId(next: z.infer<typeof nextSchema>, game: GameDefinition) {
@@ -326,7 +329,21 @@ function buildPlayerContext(players: Awaited<ReturnType<typeof loadPlayers>>) {
   ].join('\n');
 }
 
-export async function generateSceneIntro(gameId: string, sceneId: string, game: GameDefinition, players: Awaited<ReturnType<typeof loadPlayers>>) {
+function toSecondPersonText(text: string) {
+  return text
+    .replace(/\bPlayer's\b/g, 'your')
+    .replace(/\bplayer's\b/g, 'your')
+    .replace(/\bPlayer\b/g, 'you')
+    .replace(/\bplayer\b/g, 'you');
+}
+
+export async function generateSceneIntro(
+  gameId: string,
+  sceneId: string,
+  game: GameDefinition,
+  players: Awaited<ReturnType<typeof loadPlayers>>,
+  userToken?: string
+) {
   const scene = game.scenes[sceneId];
   if (!scene) {
     throw new Error(`Unknown scene '${sceneId}'.`);
@@ -336,11 +353,11 @@ export async function generateSceneIntro(gameId: string, sceneId: string, game: 
     {
       role: 'system',
       content:
-        'You are a text-RPG narrator that always speaks in the second person. Always speak to the player directly, addressing them as "you". Scenes should be described in great detail, between 15 and 20 sentences in most cases. However, when the player takes an unimportant action, keep responses to 1-2 sentences. Always vividly describe the scene and its atmosphere to immerse the player. Do not mention hidden mechanics or exit vectors. Focus on sensory details and emotional tone to set the stage for the player.'
+        'You are a text-RPG narrator that always speaks in the second person. You must always refer to the player as "you" and "your", never as "player", "he", "she", "they", or by name. Scenes should be described in great detail, between 15 and 20 sentences in most cases. However, when the player takes an unimportant action, keep responses to 1-2 sentences. Always vividly describe the scene and its atmosphere to immerse the player. Do not mention hidden mechanics or exit vectors. Focus on sensory details and emotional tone to set the stage.'
     },
     { role: 'user', content: buildPlayerContext(players) },
     { role: 'user', content: `Scene title: ${scene.title}` },
-    { role: 'user', content: `Scene setup: ${scene.basePrompt}` },
+    { role: 'user', content: `Scene setup: ${toSecondPersonText(scene.basePrompt)}` },
     {
       role: 'user',
       content: 'Introduce this scene and set immediate stakes.'
@@ -353,12 +370,19 @@ export async function generateSceneIntro(gameId: string, sceneId: string, game: 
     sceneId,
     sceneTitle: scene.title,
     text,
-    backgroundImageUrl: resolveBackgroundUrl(gameId, scene.backgroundImage),
+    backgroundImageUrl: resolveBackgroundUrl(gameId, scene.backgroundImage, userToken),
     ended: false
   };
 }
 
-export async function runSceneAction(input: string, sceneId: string, gameId: string, game: GameDefinition, players: Awaited<ReturnType<typeof loadPlayers>>) {
+export async function runSceneAction(
+  input: string,
+  sceneId: string,
+  gameId: string,
+  game: GameDefinition,
+  players: Awaited<ReturnType<typeof loadPlayers>>,
+  userToken?: string
+) {
   const scene = game.scenes[sceneId];
   if (!scene) {
     throw new Error(`Unknown scene '${sceneId}'.`);
@@ -377,7 +401,7 @@ export async function runSceneAction(input: string, sceneId: string, gameId: str
       sceneId,
       sceneTitle: scene.title,
       text: hintText,
-      backgroundImageUrl: resolveBackgroundUrl(gameId, scene.backgroundImage),
+      backgroundImageUrl: resolveBackgroundUrl(gameId, scene.backgroundImage, userToken),
       ended: false
     };
   }
@@ -391,13 +415,13 @@ export async function runSceneAction(input: string, sceneId: string, gameId: str
       {
         role: 'system',
         content:
-          'You are a text-RPG narrator (AKA a DM or Dungeon Master). Describe the scene in great detail. Speak in the second person, addressing the player as "you". Do not move to another scene. Do not mention hidden mechanics. Scenes should be described in great detail, between 15 and 20 sentences in most cases. However, when the player takes an unimportant action, keep responses to 1-2 sentences. Always vividly describe the scene and its atmosphere to immerse the player.'
+          'You are a text-RPG narrator (AKA a DM or Dungeon Master). Describe the scene in great detail. You must always speak in second person and refer to the player as "you" and "your" only. Never refer to the player in third person. Do not move to another scene. Do not mention hidden mechanics. Scenes should be described in great detail, between 15 and 20 sentences in most cases. However, when the player takes an unimportant action, keep responses to 1-2 sentences. Always vividly describe the scene and its atmosphere to immerse the player.'
       },
       { role: 'user', content: buildPlayerContext(players) },
       { role: 'user', content: `Scene title: ${scene.title}` },
-      { role: 'user', content: `Scene setup: ${scene.basePrompt}` },
+      { role: 'user', content: `Scene setup: ${toSecondPersonText(scene.basePrompt)}` },
       { role: 'user', content: `Player action: ${trimmedInput}` },
-      { role: 'user', content: scene.onFreeformPrompt }
+      { role: 'user', content: toSecondPersonText(scene.onFreeformPrompt) }
     ];
 
     const text = await veniceChat(freeformMessages);
@@ -405,7 +429,7 @@ export async function runSceneAction(input: string, sceneId: string, gameId: str
       sceneId,
       sceneTitle: scene.title,
       text,
-      backgroundImageUrl: resolveBackgroundUrl(gameId, scene.backgroundImage),
+      backgroundImageUrl: resolveBackgroundUrl(gameId, scene.backgroundImage, userToken),
       ended: false
     };
   }
@@ -417,7 +441,8 @@ export async function runSceneAction(input: string, sceneId: string, gameId: str
     const endingMessages: ChatMessage[] = [
       {
         role: 'system',
-        content: 'You are a text-RPG narrator. This is an ending beat. You may use up to 8 sentences.'
+        content:
+          'You are a text-RPG narrator. This is an ending beat. You may use up to 8 sentences. You must always speak in second person and refer to the player as "you" and "your" only.'
       },
       { role: 'user', content: buildPlayerContext(players) },
       { role: 'user', content: `Current scene: ${scene.title}` },
@@ -433,7 +458,7 @@ export async function runSceneAction(input: string, sceneId: string, gameId: str
       sceneId,
       sceneTitle: scene.title,
       text,
-      backgroundImageUrl: resolveBackgroundUrl(gameId, scene.backgroundImage),
+      backgroundImageUrl: resolveBackgroundUrl(gameId, scene.backgroundImage, userToken),
       ended: true
     };
   }
@@ -446,13 +471,14 @@ export async function runSceneAction(input: string, sceneId: string, gameId: str
   const transitionMessages: ChatMessage[] = [
     {
       role: 'system',
-      content: 'You are a text-RPG narrator. Keep output to 2-6 sentences for transition scenes.'
+      content:
+        'You are a text-RPG narrator. For transition scenes, write rich scene-setting narration in 10-20 sentences unless the user explicitly asks for brevity. You must always speak in second person and refer to the player as "you" and "your" only.'
     },
     { role: 'user', content: buildPlayerContext(players) },
     { role: 'user', content: `Previous scene: ${scene.title}` },
     { role: 'user', content: `Triggered exit intent: ${matchedExit.intent}` },
     { role: 'user', content: `Next scene title: ${nextScene.title}` },
-    { role: 'user', content: `Next scene setup: ${nextScene.basePrompt}` },
+    { role: 'user', content: `Next scene setup: ${toSecondPersonText(nextScene.basePrompt)}` },
     { role: 'user', content: 'Narrate the successful action and transition into the next scene.' }
   ];
 
@@ -462,7 +488,7 @@ export async function runSceneAction(input: string, sceneId: string, gameId: str
     sceneId: nextSceneId,
     sceneTitle: nextScene.title,
     text,
-    backgroundImageUrl: resolveBackgroundUrl(gameId, nextScene.backgroundImage),
+    backgroundImageUrl: resolveBackgroundUrl(gameId, nextScene.backgroundImage, userToken),
     ended: false
   };
 }

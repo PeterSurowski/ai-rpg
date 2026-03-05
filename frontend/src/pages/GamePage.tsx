@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { CSSProperties, FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { api } from '../api';
@@ -23,6 +23,7 @@ export default function GamePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showRestartModal, setShowRestartModal] = useState(false);
+  const [revealStage, setRevealStage] = useState<'hidden' | 'image' | 'content'>('content');
   const logRef = useRef<HTMLDivElement>(null);
   const scrollAnimationRef = useRef<number | null>(null);
 
@@ -96,6 +97,29 @@ export default function GamePage() {
       }
     };
   }, [history, loading]);
+
+  useEffect(() => {
+    let imageFrameId: number | null = null;
+    let contentTimerId: number | null = null;
+
+    if (!backgroundImageUrl) {
+      setRevealStage('content');
+      return;
+    }
+
+    setRevealStage('hidden');
+    imageFrameId = requestAnimationFrame(() => setRevealStage('image'));
+    contentTimerId = window.setTimeout(() => setRevealStage('content'), 750);
+
+    return () => {
+      if (imageFrameId !== null) {
+        cancelAnimationFrame(imageFrameId);
+      }
+      if (contentTimerId !== null) {
+        window.clearTimeout(contentTimerId);
+      }
+    };
+  }, [backgroundImageUrl, sceneId]);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -179,56 +203,58 @@ export default function GamePage() {
     }
   };
 
+  const revealClass = backgroundImageUrl
+    ? revealStage === 'content'
+      ? 'has-bg-image bg-visible content-visible'
+      : revealStage === 'image'
+        ? 'has-bg-image bg-visible'
+        : 'has-bg-image'
+    : 'content-visible';
+
+  const sectionStyle = backgroundImageUrl
+    ? ({ '--scene-bg-image': `url(${backgroundImageUrl})` } as CSSProperties)
+    : undefined;
+
   return (
     <main className="screen with-nav game-screen">
       <Navbar onRestart={() => setShowRestartModal(true)} />
-      <section
-        className="content game-layout"
-        style={
-          backgroundImageUrl
-            ? {
-                backgroundImage: `linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.65)), url(${backgroundImageUrl})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                borderRadius: '12px',
-                padding: '0.75rem'
-              }
-            : { backgroundColor: '#000', borderRadius: '12px', padding: '0.75rem' }
-        }
-      >
-        <h1>{sceneTitle || 'Game'}</h1>
-        <div className="log" ref={logRef}>
-          {history.map((item, index) => (
-            <article key={`${item.role}-${index}`} className={`bubble ${item.role}`}>
-              <p>{item.content}</p>
-            </article>
-          ))}
-          {loading && <p className="status">Thinking…</p>}
-        </div>
-
-        <form className="action-form" onSubmit={onSubmit}>
-          <label className="field">
-            <span>What do you do?</span>
-            <textarea
-              value={action}
-              onChange={(event) => setAction(event.target.value)}
-              onKeyDown={onActionKeyDown}
-              rows={3}
-              placeholder="Type your action, or tap Hint."
-              disabled={ended}
-            />
-          </label>
-          {error && <p className="error">{error}</p>}
-          {ended && <p className="status">This path has reached an ending.</p>}
-          <div className="action-row">
-            <button className="ghost" type="button" onClick={onHint} disabled={loading || ended}>
-              Hint
-            </button>
-            <button className="primary" type="submit" disabled={loading || ended}>
-            Send action
-            </button>
+      <section className={`content game-layout ${revealClass}`} style={sectionStyle}>
+        <div className="scene-bg-layer" aria-hidden="true" />
+        <div className="scene-ui">
+          <h1>{sceneTitle || 'Game'}</h1>
+          <div className="log" ref={logRef}>
+            {history.map((item, index) => (
+              <article key={`${item.role}-${index}`} className={`bubble ${item.role}`}>
+                <p>{item.content}</p>
+              </article>
+            ))}
+            {loading && <p className="status">Thinking…</p>}
           </div>
-        </form>
+
+          <form className="action-form" onSubmit={onSubmit}>
+            <label className="field">
+              <span>What do you do?</span>
+              <textarea
+                value={action}
+                onChange={(event) => setAction(event.target.value)}
+                onKeyDown={onActionKeyDown}
+                rows={3}
+                placeholder="Type your action, or tap Hint."
+                disabled={ended}
+              />
+            </label>
+            {error && <p className="error">{error}</p>}
+            {ended && <p className="status">This path has reached an ending.</p>}
+            <div className="action-row">
+              <button className="ghost" type="button" onClick={onHint} disabled={loading || ended}>
+                Hint
+              </button>
+              <button className="primary" type="submit" disabled={loading || ended}>
+              Send action
+              </button>
+            </div>
+          </form>
+        </div>
       </section>
 
       {showRestartModal && (

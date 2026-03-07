@@ -7,7 +7,13 @@ import { z } from 'zod';
 import { v4 as uuid } from 'uuid';
 import { all, get, run } from '../db.js';
 import { AuthedRequest, requireAuth } from '../middleware/auth.js';
-import { generateSceneIntro, loadGameForUser, runSceneAction } from '../services/gameEngine.js';
+import {
+  ActionHistoryEntry,
+  generateSceneIntro,
+  getSceneSnapshot,
+  loadGameForUser,
+  runSceneAction
+} from '../services/gameEngine.js';
 
 const router = Router();
 
@@ -244,6 +250,53 @@ type NavigationState = {
   canGoForward: boolean;
 };
 
+type SceneTurnRow = {
+  id: number;
+  role: 'assistant' | 'user';
+  content: string;
+};
+
+async function getSceneTurns(gameId: string, userId: string, sceneHistoryId: number, limit = 20): Promise<ActionHistoryEntry[]> {
+  const rows = await all<SceneTurnRow>(
+    `SELECT id, role, content
+       FROM game_scene_turns
+      WHERE game_id = ? AND user_id = ? AND scene_history_id = ?
+      ORDER BY id DESC
+      LIMIT ?`,
+    [gameId, userId, sceneHistoryId, limit]
+  );
+
+  return rows
+    .reverse()
+    .map((row) => ({ role: row.role, content: row.content }));
+}
+
+async function appendSceneTurn(
+  gameId: string,
+  userId: string,
+  sceneHistoryId: number,
+  role: 'assistant' | 'user',
+  content: string
+) {
+  await run('INSERT INTO game_scene_turns (game_id, user_id, scene_history_id, role, content) VALUES (?, ?, ?, ?, ?)', [
+    gameId,
+    userId,
+    sceneHistoryId,
+    role,
+    content
+  ]);
+}
+
+function latestAssistantText(turns: ActionHistoryEntry[]) {
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    if (turns[index].role === 'assistant') {
+      return turns[index].content;
+    }
+  }
+
+  return '';
+}
+
 async function getHistoryRowById(gameId: string, userId: string, historyId: number) {
   return get<SceneHistoryRow>(
     'SELECT id, scene_id, scene_title FROM game_scene_history WHERE game_id = ? AND user_id = ? AND id = ?',
@@ -377,9 +430,16 @@ router.post('/:gameId/play/start', requireAuth, async (req, res) => {
   const currentEntry = await ensureCurrentHistoryEntry(gameId, userId, initialSceneId, initialScene.title, currentHistoryId);
   await setCurrentSceneAndCursor(gameId, userId, initialSceneId, currentEntry.id);
 
-  const response = await generateSceneIntro(gameId, initialSceneId, loaded.game, loaded.players, bearerToken);
+  let history = await getSceneTurns(gameId, userId, currentEntry.id);
+  if (history.length === 0) {
+    const intro = await generateSceneIntro(gameId, initialSceneId, loaded.game, loaded.players, bearerToken);
+    await appendSceneTurn(gameId, userId, currentEntry.id, 'assistant', intro.text);
+    history = [{ role: 'assistant', content: intro.text }];
+  }
+
+  const snapshot = getSceneSnapshot(gameId, initialSceneId, loaded.game, bearerToken);
   const navigationState = await getNavigationState(gameId, userId, currentEntry.id);
-  return res.json({ ...response, ...navigationState });
+  return res.json({ ...snapshot, text: latestAssistantText(history), history, ...navigationState });
 });
 
 router.post('/:gameId/play/action', requireAuth, async (req, res) => {
@@ -411,16 +471,6 @@ router.post('/:gameId/play/action', requireAuth, async (req, res) => {
   const candidateSceneId = savedSceneId ?? parsed.data.sceneId;
   const activeSceneId = loaded.game.scenes[candidateSceneId] ? candidateSceneId : loaded.game.startSceneId;
 
-  const response = await runSceneAction(
-    parsed.data.input,
-    activeSceneId,
-    gameId,
-    loaded.game,
-    loaded.players,
-    parsed.data.history,
-    bearerToken
-  );
-
   const currentHistoryId = loaded.gameRecord.current_scene_history_id;
   let historyEntry = currentHistoryId ? await getHistoryRowById(gameId, userId, currentHistoryId) : undefined;
 
@@ -429,16 +479,37 @@ router.post('/:gameId/play/action', requireAuth, async (req, res) => {
     historyEntry = await appendSceneHistory(gameId, userId, activeSceneId, activeScene.title);
   }
 
-  if (response.sceneId !== activeSceneId) {
-    const nextEntry = await ensureTimelineEntry(gameId, userId, response.sceneId, response.sceneTitle, historyEntry.id);
-    await setCurrentSceneAndCursor(gameId, userId, response.sceneId, nextEntry.id);
-    const navigationState = await getNavigationState(gameId, userId, nextEntry.id);
-    return res.json({ ...response, ...navigationState });
+  const priorHistory = await getSceneTurns(gameId, userId, historyEntry.id);
+
+  const response = await runSceneAction(
+    parsed.data.input,
+    activeSceneId,
+    gameId,
+    loaded.game,
+    loaded.players,
+    priorHistory,
+    bearerToken
+  );
+
+  const trimmedInput = parsed.data.input.trim();
+  if (trimmedInput.length > 0) {
+    await appendSceneTurn(gameId, userId, historyEntry.id, 'user', trimmedInput);
   }
 
+  if (response.sceneId !== activeSceneId) {
+    const nextEntry = await ensureTimelineEntry(gameId, userId, response.sceneId, response.sceneTitle, historyEntry.id);
+    await appendSceneTurn(gameId, userId, nextEntry.id, 'assistant', response.text);
+    await setCurrentSceneAndCursor(gameId, userId, response.sceneId, nextEntry.id);
+    const history = await getSceneTurns(gameId, userId, nextEntry.id);
+    const navigationState = await getNavigationState(gameId, userId, nextEntry.id);
+    return res.json({ ...response, history, ...navigationState });
+  }
+
+  await appendSceneTurn(gameId, userId, historyEntry.id, 'assistant', response.text);
   await setCurrentSceneAndCursor(gameId, userId, response.sceneId, historyEntry.id);
+  const history = await getSceneTurns(gameId, userId, historyEntry.id);
   const navigationState = await getNavigationState(gameId, userId, historyEntry.id);
-  return res.json({ ...response, ...navigationState });
+  return res.json({ ...response, history, ...navigationState });
 });
 
 router.post('/:gameId/play/restart', requireAuth, async (req, res) => {
@@ -464,8 +535,10 @@ router.post('/:gameId/play/restart', requireAuth, async (req, res) => {
   const resetEntry = await resetSceneHistory(gameId, userId, restartSceneId, restartScene.title);
 
   const response = await generateSceneIntro(gameId, restartSceneId, loaded.game, loaded.players, bearerToken);
+  await appendSceneTurn(gameId, userId, resetEntry.id, 'assistant', response.text);
+  const history = await getSceneTurns(gameId, userId, resetEntry.id);
   const navigationState = await getNavigationState(gameId, userId, resetEntry.id);
-  return res.json({ ...response, ...navigationState });
+  return res.json({ ...response, history, ...navigationState });
 });
 
 router.post('/:gameId/play/back', requireAuth, async (req, res) => {
@@ -493,9 +566,16 @@ router.post('/:gameId/play/back', requireAuth, async (req, res) => {
 
   await setCurrentSceneAndCursor(gameId, userId, previousEntry.scene_id, previousEntry.id);
 
-  const response = await generateSceneIntro(gameId, previousEntry.scene_id, loaded.game, loaded.players, bearerToken);
+  let history = await getSceneTurns(gameId, userId, previousEntry.id);
+  if (history.length === 0) {
+    const intro = await generateSceneIntro(gameId, previousEntry.scene_id, loaded.game, loaded.players, bearerToken);
+    await appendSceneTurn(gameId, userId, previousEntry.id, 'assistant', intro.text);
+    history = [{ role: 'assistant', content: intro.text }];
+  }
+
+  const snapshot = getSceneSnapshot(gameId, previousEntry.scene_id, loaded.game, bearerToken);
   const navigationState = await getNavigationState(gameId, userId, previousEntry.id);
-  return res.json({ ...response, ...navigationState });
+  return res.json({ ...snapshot, text: latestAssistantText(history), history, ...navigationState });
 });
 
 router.post('/:gameId/play/forward', requireAuth, async (req, res) => {
@@ -523,9 +603,16 @@ router.post('/:gameId/play/forward', requireAuth, async (req, res) => {
 
   await setCurrentSceneAndCursor(gameId, userId, nextEntry.scene_id, nextEntry.id);
 
-  const response = await generateSceneIntro(gameId, nextEntry.scene_id, loaded.game, loaded.players, bearerToken);
+  let history = await getSceneTurns(gameId, userId, nextEntry.id);
+  if (history.length === 0) {
+    const intro = await generateSceneIntro(gameId, nextEntry.scene_id, loaded.game, loaded.players, bearerToken);
+    await appendSceneTurn(gameId, userId, nextEntry.id, 'assistant', intro.text);
+    history = [{ role: 'assistant', content: intro.text }];
+  }
+
+  const snapshot = getSceneSnapshot(gameId, nextEntry.scene_id, loaded.game, bearerToken);
   const navigationState = await getNavigationState(gameId, userId, nextEntry.id);
-  return res.json({ ...response, ...navigationState });
+  return res.json({ ...snapshot, text: latestAssistantText(history), history, ...navigationState });
 });
 
 router.get('/:gameId/assets/*assetPath', requireAuth, async (req, res) => {

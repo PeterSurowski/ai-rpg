@@ -393,6 +393,20 @@ export async function generateSceneIntro(
   };
 }
 
+export function getSceneSnapshot(gameId: string, sceneId: string, game: GameDefinition, userToken?: string) {
+  const scene = game.scenes[sceneId];
+  if (!scene) {
+    throw new Error(`Unknown scene '${sceneId}'.`);
+  }
+
+  return {
+    sceneId,
+    sceneTitle: scene.title,
+    backgroundImageUrl: resolveBackgroundUrl(gameId, scene.backgroundImage, userToken),
+    ended: false
+  };
+}
+
 export async function runSceneAction(
   input: string,
   sceneId: string,

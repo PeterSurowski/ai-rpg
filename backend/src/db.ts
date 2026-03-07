@@ -120,4 +120,24 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_game_scene_history_game_user_id
     ON game_scene_history (game_id, user_id, id);
   `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS game_scene_turns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      game_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      scene_history_id INTEGER NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('assistant', 'user')),
+      content TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (scene_history_id) REFERENCES game_scene_history(id) ON DELETE CASCADE
+    );
+  `);
+
+  await run(`
+    CREATE INDEX IF NOT EXISTS idx_game_scene_turns_scene_history
+    ON game_scene_turns (game_id, user_id, scene_history_id, id);
+  `);
 }

@@ -8,6 +8,7 @@ type PlayResponse = {
   sceneId: string;
   sceneTitle: string;
   text: string;
+  history: HistoryMessage[];
   backgroundImageUrl: string | null;
   ended: boolean;
   canGoBack: boolean;
@@ -48,7 +49,9 @@ export default function GamePage() {
         setCanGoBack(response.data.canGoBack);
         setCanGoForward(response.data.canGoForward);
         setEnded(response.data.ended);
-        setHistory([{ role: 'assistant', content: response.data.text }]);
+        setHistory(
+          response.data.history.length > 0 ? response.data.history : [{ role: 'assistant', content: response.data.text }]
+        );
       } catch {
         setError('Could not start this game.');
       } finally {
@@ -153,6 +156,7 @@ export default function GamePage() {
     }
 
     const userAction = action.trim();
+  const previousHistory = history;
     const nextHistory: HistoryMessage[] = [...history, { role: 'user', content: userAction }];
     setHistory(nextHistory);
     setAction('');
@@ -162,8 +166,7 @@ export default function GamePage() {
     try {
       const response = await api.post<PlayResponse>(`/games/${gameId}/play/action`, {
         sceneId,
-        input: userAction,
-        history: nextHistory.slice(-12)
+        input: userAction
       });
 
       setSceneId(response.data.sceneId);
@@ -172,8 +175,13 @@ export default function GamePage() {
       setCanGoBack(response.data.canGoBack);
       setCanGoForward(response.data.canGoForward);
       setEnded(response.data.ended);
-      setHistory((prev) => [...prev, { role: 'assistant', content: response.data.text }]);
+      setHistory(
+        response.data.history.length > 0
+          ? response.data.history
+          : [...nextHistory, { role: 'assistant', content: response.data.text }]
+      );
     } catch {
+      setHistory(previousHistory);
       setError('Could not process your action.');
     } finally {
       setLoading(false);
@@ -200,7 +208,11 @@ export default function GamePage() {
         input: 'HINT'
       });
 
-      setHistory((prev) => [...prev, { role: 'assistant', content: response.data.text }]);
+      setHistory(
+        response.data.history.length > 0
+          ? response.data.history
+          : [...history, { role: 'assistant', content: response.data.text }]
+      );
     } catch {
       setError('Could not fetch a hint right now.');
     } finally {
@@ -223,7 +235,9 @@ export default function GamePage() {
       setCanGoBack(response.data.canGoBack);
       setCanGoForward(response.data.canGoForward);
       setEnded(response.data.ended);
-      setHistory([{ role: 'assistant', content: response.data.text }]);
+      setHistory(
+        response.data.history.length > 0 ? response.data.history : [{ role: 'assistant', content: response.data.text }]
+      );
       setAction('');
       setShowRestartModal(false);
     } catch {
@@ -248,7 +262,9 @@ export default function GamePage() {
       setCanGoBack(response.data.canGoBack);
       setCanGoForward(response.data.canGoForward);
       setEnded(response.data.ended);
-      setHistory([{ role: 'assistant', content: response.data.text }]);
+      setHistory(
+        response.data.history.length > 0 ? response.data.history : [{ role: 'assistant', content: response.data.text }]
+      );
       setAction('');
       setImageOnlyView(false);
     } catch {
@@ -273,7 +289,9 @@ export default function GamePage() {
       setCanGoBack(response.data.canGoBack);
       setCanGoForward(response.data.canGoForward);
       setEnded(response.data.ended);
-      setHistory([{ role: 'assistant', content: response.data.text }]);
+      setHistory(
+        response.data.history.length > 0 ? response.data.history : [{ role: 'assistant', content: response.data.text }]
+      );
       setAction('');
       setImageOnlyView(false);
     } catch {

@@ -4,6 +4,8 @@ import { clearToken } from '../auth';
 type NavbarProps = {
   onBack?: () => void;
   canGoBack?: boolean;
+  onForward?: () => void;
+  canGoForward?: boolean;
   onRestart?: () => void;
   onToggleImageView?: () => void;
   imageOnlyView?: boolean;
@@ -13,6 +15,8 @@ type NavbarProps = {
 export default function Navbar({
   onBack,
   canGoBack = false,
+  onForward,
+  canGoForward = false,
   onRestart,
   onToggleImageView,
   imageOnlyView = false,
@@ -32,8 +36,19 @@ export default function Navbar({
       </Link>
       <div className="nav-actions">
         {onBack && (
-          <button className="link-button" onClick={onBack} type="button" disabled={!canGoBack}>
-            Back
+          <button className="link-button" onClick={onBack} type="button" disabled={!canGoBack} aria-label="Back">
+            &lt;
+          </button>
+        )}
+        {onForward && (
+          <button
+            className="link-button"
+            onClick={onForward}
+            type="button"
+            disabled={!canGoForward}
+            aria-label="Forward"
+          >
+            &gt;
           </button>
         )}
         {onRestart && (

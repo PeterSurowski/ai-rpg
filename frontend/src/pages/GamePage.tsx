@@ -10,6 +10,8 @@ type PlayResponse = {
   text: string;
   backgroundImageUrl: string | null;
   ended: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
 };
 
 export default function GamePage() {
@@ -18,7 +20,8 @@ export default function GamePage() {
   const [sceneId, setSceneId] = useState('');
   const [sceneTitle, setSceneTitle] = useState('');
   const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | null>(null);
-  const [sceneBackStack, setSceneBackStack] = useState<string[]>([]);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [canGoForward, setCanGoForward] = useState(false);
   const [ended, setEnded] = useState(false);
   const [action, setAction] = useState('');
   const [loading, setLoading] = useState(false);
@@ -42,7 +45,8 @@ export default function GamePage() {
         setSceneId(response.data.sceneId);
         setSceneTitle(response.data.sceneTitle);
         setBackgroundImageUrl(response.data.backgroundImageUrl);
-        setSceneBackStack([]);
+        setCanGoBack(response.data.canGoBack);
+        setCanGoForward(response.data.canGoForward);
         setEnded(response.data.ended);
         setHistory([{ role: 'assistant', content: response.data.text }]);
       } catch {
@@ -158,15 +162,15 @@ export default function GamePage() {
     try {
       const response = await api.post<PlayResponse>(`/games/${gameId}/play/action`, {
         sceneId,
-        input: userAction
+        input: userAction,
+        history: nextHistory.slice(-12)
       });
 
       setSceneId(response.data.sceneId);
       setSceneTitle(response.data.sceneTitle);
       setBackgroundImageUrl(response.data.backgroundImageUrl);
-      if (response.data.sceneId !== sceneId) {
-        setSceneBackStack((prev) => [...prev, sceneId]);
-      }
+      setCanGoBack(response.data.canGoBack);
+      setCanGoForward(response.data.canGoForward);
       setEnded(response.data.ended);
       setHistory((prev) => [...prev, { role: 'assistant', content: response.data.text }]);
     } catch {
@@ -216,7 +220,8 @@ export default function GamePage() {
       setSceneId(response.data.sceneId);
       setSceneTitle(response.data.sceneTitle);
       setBackgroundImageUrl(response.data.backgroundImageUrl);
-      setSceneBackStack([]);
+      setCanGoBack(response.data.canGoBack);
+      setCanGoForward(response.data.canGoForward);
       setEnded(response.data.ended);
       setHistory([{ role: 'assistant', content: response.data.text }]);
       setAction('');
@@ -229,25 +234,50 @@ export default function GamePage() {
   };
 
   const onBack = async () => {
-    if (loading || sceneBackStack.length === 0) {
+    if (loading || !canGoBack) {
       return;
     }
 
-    const targetSceneId = sceneBackStack[sceneBackStack.length - 1];
     setLoading(true);
     setError('');
     try {
-      const response = await api.post<PlayResponse>(`/games/${gameId}/play/start`, { sceneId: targetSceneId });
+      const response = await api.post<PlayResponse>(`/games/${gameId}/play/back`, {});
       setSceneId(response.data.sceneId);
       setSceneTitle(response.data.sceneTitle);
       setBackgroundImageUrl(response.data.backgroundImageUrl);
+      setCanGoBack(response.data.canGoBack);
+      setCanGoForward(response.data.canGoForward);
       setEnded(response.data.ended);
       setHistory([{ role: 'assistant', content: response.data.text }]);
       setAction('');
       setImageOnlyView(false);
-      setSceneBackStack((prev) => prev.slice(0, -1));
     } catch {
       setError('Could not go back to the previous scene.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onForward = async () => {
+    if (loading || !canGoForward) {
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const response = await api.post<PlayResponse>(`/games/${gameId}/play/forward`, {});
+      setSceneId(response.data.sceneId);
+      setSceneTitle(response.data.sceneTitle);
+      setBackgroundImageUrl(response.data.backgroundImageUrl);
+      setCanGoBack(response.data.canGoBack);
+      setCanGoForward(response.data.canGoForward);
+      setEnded(response.data.ended);
+      setHistory([{ role: 'assistant', content: response.data.text }]);
+      setAction('');
+      setImageOnlyView(false);
+    } catch {
+      setError('Could not go forward to the next scene.');
     } finally {
       setLoading(false);
     }
@@ -271,7 +301,9 @@ export default function GamePage() {
     <main className="screen with-nav game-screen">
       <Navbar
         onBack={onBack}
-        canGoBack={sceneBackStack.length > 0}
+        canGoBack={canGoBack}
+        onForward={onForward}
+        canGoForward={canGoForward}
         onRestart={() => setShowRestartModal(true)}
         onToggleImageView={() => setImageOnlyView((prev) => !prev)}
         imageOnlyView={imageOnlyView}

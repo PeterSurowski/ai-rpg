@@ -222,10 +222,127 @@ const playStartSchema = z.object({
   sceneId: z.string().min(1).optional()
 });
 
+const historyEntrySchema = z.object({
+  role: z.enum(['assistant', 'user']),
+  content: z.string().min(1).max(4000)
+});
+
 const playActionSchema = z.object({
   sceneId: z.string().min(1),
-  input: z.string().min(1).max(600)
+  input: z.string().min(1).max(600),
+  history: z.array(historyEntrySchema).max(20).optional()
 });
+
+type SceneHistoryRow = {
+  id: number;
+  scene_id: string;
+  scene_title: string;
+};
+
+type NavigationState = {
+  canGoBack: boolean;
+  canGoForward: boolean;
+};
+
+async function getHistoryRowById(gameId: string, userId: string, historyId: number) {
+  return get<SceneHistoryRow>(
+    'SELECT id, scene_id, scene_title FROM game_scene_history WHERE game_id = ? AND user_id = ? AND id = ?',
+    [gameId, userId, historyId]
+  );
+}
+
+async function getPreviousHistoryRow(gameId: string, userId: string, historyId: number) {
+  return get<SceneHistoryRow>(
+    'SELECT id, scene_id, scene_title FROM game_scene_history WHERE game_id = ? AND user_id = ? AND id < ? ORDER BY id DESC LIMIT 1',
+    [gameId, userId, historyId]
+  );
+}
+
+async function getNextHistoryRow(gameId: string, userId: string, historyId: number) {
+  return get<SceneHistoryRow>(
+    'SELECT id, scene_id, scene_title FROM game_scene_history WHERE game_id = ? AND user_id = ? AND id > ? ORDER BY id ASC LIMIT 1',
+    [gameId, userId, historyId]
+  );
+}
+
+async function appendSceneHistory(gameId: string, userId: string, sceneId: string, sceneTitle: string) {
+  await run('INSERT INTO game_scene_history (game_id, user_id, scene_id, scene_title) VALUES (?, ?, ?, ?)', [
+    gameId,
+    userId,
+    sceneId,
+    sceneTitle
+  ]);
+
+  const inserted = await get<SceneHistoryRow>(
+    'SELECT id, scene_id, scene_title FROM game_scene_history WHERE game_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1',
+    [gameId, userId]
+  );
+
+  if (!inserted) {
+    throw new Error('Failed to append scene history entry.');
+  }
+
+  return inserted;
+}
+
+async function ensureTimelineEntry(gameId: string, userId: string, sceneId: string, sceneTitle: string, currentHistoryId: number | null) {
+  if (currentHistoryId) {
+    const currentEntry = await getHistoryRowById(gameId, userId, currentHistoryId);
+    if (currentEntry?.scene_id === sceneId) {
+      return currentEntry;
+    }
+  }
+
+  if (currentHistoryId) {
+    await run('DELETE FROM game_scene_history WHERE game_id = ? AND user_id = ? AND id > ?', [gameId, userId, currentHistoryId]);
+  }
+
+  return appendSceneHistory(gameId, userId, sceneId, sceneTitle);
+}
+
+async function setCurrentSceneAndCursor(gameId: string, userId: string, sceneId: string, historyId: number) {
+  await run('UPDATE games SET current_scene_id = ?, current_scene_history_id = ? WHERE id = ? AND user_id = ?', [
+    sceneId,
+    historyId,
+    gameId,
+    userId
+  ]);
+}
+
+async function resetSceneHistory(gameId: string, userId: string, sceneId: string, sceneTitle: string) {
+  await run('DELETE FROM game_scene_history WHERE game_id = ? AND user_id = ?', [gameId, userId]);
+
+  const inserted = await appendSceneHistory(gameId, userId, sceneId, sceneTitle);
+  await setCurrentSceneAndCursor(gameId, userId, sceneId, inserted.id);
+  return inserted;
+}
+
+async function getNavigationState(gameId: string, userId: string, currentHistoryId: number | null): Promise<NavigationState> {
+  if (!currentHistoryId) {
+    return { canGoBack: false, canGoForward: false };
+  }
+
+  const [previousEntry, nextEntry] = await Promise.all([
+    getPreviousHistoryRow(gameId, userId, currentHistoryId),
+    getNextHistoryRow(gameId, userId, currentHistoryId)
+  ]);
+
+  return {
+    canGoBack: Boolean(previousEntry),
+    canGoForward: Boolean(nextEntry)
+  };
+}
+
+async function ensureCurrentHistoryEntry(gameId: string, userId: string, sceneId: string, sceneTitle: string, currentHistoryId: number | null) {
+  if (currentHistoryId) {
+    const existing = await getHistoryRowById(gameId, userId, currentHistoryId);
+    if (existing?.scene_id === sceneId) {
+      return existing;
+    }
+  }
+
+  return appendSceneHistory(gameId, userId, sceneId, sceneTitle);
+}
 
 router.post('/:gameId/play/start', requireAuth, async (req, res) => {
   const gameId = String(req.params.gameId);
@@ -251,10 +368,18 @@ router.post('/:gameId/play/start', requireAuth, async (req, res) => {
   const candidateSceneId = requestedSceneId ?? savedSceneId ?? loaded.game.startSceneId;
   const initialSceneId = loaded.game.scenes[candidateSceneId] ? candidateSceneId : loaded.game.startSceneId;
 
-  await run('UPDATE games SET current_scene_id = ? WHERE id = ? AND user_id = ?', [initialSceneId, gameId, userId]);
+  const initialScene = loaded.game.scenes[initialSceneId];
+  if (!initialScene) {
+    return res.status(400).json({ message: 'Game start scene is invalid.' });
+  }
+
+  const currentHistoryId = loaded.gameRecord.current_scene_history_id;
+  const currentEntry = await ensureCurrentHistoryEntry(gameId, userId, initialSceneId, initialScene.title, currentHistoryId);
+  await setCurrentSceneAndCursor(gameId, userId, initialSceneId, currentEntry.id);
 
   const response = await generateSceneIntro(gameId, initialSceneId, loaded.game, loaded.players, bearerToken);
-  return res.json(response);
+  const navigationState = await getNavigationState(gameId, userId, currentEntry.id);
+  return res.json({ ...response, ...navigationState });
 });
 
 router.post('/:gameId/play/action', requireAuth, async (req, res) => {
@@ -292,12 +417,28 @@ router.post('/:gameId/play/action', requireAuth, async (req, res) => {
     gameId,
     loaded.game,
     loaded.players,
+    parsed.data.history,
     bearerToken
   );
 
-  await run('UPDATE games SET current_scene_id = ? WHERE id = ? AND user_id = ?', [response.sceneId, gameId, userId]);
+  const currentHistoryId = loaded.gameRecord.current_scene_history_id;
+  let historyEntry = currentHistoryId ? await getHistoryRowById(gameId, userId, currentHistoryId) : undefined;
 
-  return res.json(response);
+  if (!historyEntry) {
+    const activeScene = loaded.game.scenes[activeSceneId];
+    historyEntry = await appendSceneHistory(gameId, userId, activeSceneId, activeScene.title);
+  }
+
+  if (response.sceneId !== activeSceneId) {
+    const nextEntry = await ensureTimelineEntry(gameId, userId, response.sceneId, response.sceneTitle, historyEntry.id);
+    await setCurrentSceneAndCursor(gameId, userId, response.sceneId, nextEntry.id);
+    const navigationState = await getNavigationState(gameId, userId, nextEntry.id);
+    return res.json({ ...response, ...navigationState });
+  }
+
+  await setCurrentSceneAndCursor(gameId, userId, response.sceneId, historyEntry.id);
+  const navigationState = await getNavigationState(gameId, userId, historyEntry.id);
+  return res.json({ ...response, ...navigationState });
 });
 
 router.post('/:gameId/play/restart', requireAuth, async (req, res) => {
@@ -318,10 +459,73 @@ router.post('/:gameId/play/restart', requireAuth, async (req, res) => {
     return res.status(400).json({ message: 'Game start scene is invalid.' });
   }
 
-  await run('UPDATE games SET current_scene_id = ? WHERE id = ? AND user_id = ?', [restartSceneId, gameId, userId]);
+  const restartScene = loaded.game.scenes[restartSceneId];
+
+  const resetEntry = await resetSceneHistory(gameId, userId, restartSceneId, restartScene.title);
 
   const response = await generateSceneIntro(gameId, restartSceneId, loaded.game, loaded.players, bearerToken);
-  return res.json(response);
+  const navigationState = await getNavigationState(gameId, userId, resetEntry.id);
+  return res.json({ ...response, ...navigationState });
+});
+
+router.post('/:gameId/play/back', requireAuth, async (req, res) => {
+  const gameId = String(req.params.gameId);
+  const userId = (req as AuthedRequest).userId;
+
+  const loaded = await loadGameForUser(gameId, userId);
+  if (!loaded) {
+    return res.status(404).json({ message: 'Game not found.' });
+  }
+
+  const bearerToken = req.headers.authorization?.startsWith('Bearer ')
+    ? req.headers.authorization.replace('Bearer ', '')
+    : undefined;
+
+  const currentHistoryId = loaded.gameRecord.current_scene_history_id;
+  if (!currentHistoryId) {
+    return res.status(400).json({ message: 'No previous scene available.' });
+  }
+
+  const previousEntry = await getPreviousHistoryRow(gameId, userId, currentHistoryId);
+  if (!previousEntry) {
+    return res.status(400).json({ message: 'No previous scene available.' });
+  }
+
+  await setCurrentSceneAndCursor(gameId, userId, previousEntry.scene_id, previousEntry.id);
+
+  const response = await generateSceneIntro(gameId, previousEntry.scene_id, loaded.game, loaded.players, bearerToken);
+  const navigationState = await getNavigationState(gameId, userId, previousEntry.id);
+  return res.json({ ...response, ...navigationState });
+});
+
+router.post('/:gameId/play/forward', requireAuth, async (req, res) => {
+  const gameId = String(req.params.gameId);
+  const userId = (req as AuthedRequest).userId;
+
+  const loaded = await loadGameForUser(gameId, userId);
+  if (!loaded) {
+    return res.status(404).json({ message: 'Game not found.' });
+  }
+
+  const bearerToken = req.headers.authorization?.startsWith('Bearer ')
+    ? req.headers.authorization.replace('Bearer ', '')
+    : undefined;
+
+  const currentHistoryId = loaded.gameRecord.current_scene_history_id;
+  if (!currentHistoryId) {
+    return res.status(400).json({ message: 'No forward scene available.' });
+  }
+
+  const nextEntry = await getNextHistoryRow(gameId, userId, currentHistoryId);
+  if (!nextEntry) {
+    return res.status(400).json({ message: 'No forward scene available.' });
+  }
+
+  await setCurrentSceneAndCursor(gameId, userId, nextEntry.scene_id, nextEntry.id);
+
+  const response = await generateSceneIntro(gameId, nextEntry.scene_id, loaded.game, loaded.players, bearerToken);
+  const navigationState = await getNavigationState(gameId, userId, nextEntry.id);
+  return res.json({ ...response, ...navigationState });
 });
 
 router.get('/:gameId/assets/*assetPath', requireAuth, async (req, res) => {

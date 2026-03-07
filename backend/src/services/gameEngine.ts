@@ -37,6 +37,10 @@ const gameDefinitionSchema = z.object({
 
 export type GameDefinition = z.infer<typeof gameDefinitionSchema>;
 export type SceneDefinition = z.infer<typeof sceneSchema>;
+export type ActionHistoryEntry = {
+  role: 'assistant' | 'user';
+  content: string;
+};
 
 type PlayerRow = {
   role: 'player' | 'support';
@@ -50,6 +54,7 @@ type GameRecord = {
   user_id: string;
   files_path: string;
   current_scene_id: string | null;
+  current_scene_history_id: number | null;
 };
 
 const exitDecisionSchema = z.object({
@@ -293,10 +298,10 @@ async function loadPlayers(gameId: string) {
 }
 
 export async function loadGameForUser(gameId: string, userId: string) {
-  const gameRecord = await get<GameRecord>('SELECT id, user_id, files_path, current_scene_id FROM games WHERE id = ? AND user_id = ?', [
-    gameId,
-    userId
-  ]);
+  const gameRecord = await get<GameRecord>(
+    'SELECT id, user_id, files_path, current_scene_id, current_scene_history_id FROM games WHERE id = ? AND user_id = ?',
+    [gameId, userId]
+  );
 
   if (!gameRecord) {
     return null;
@@ -337,6 +342,19 @@ function toSecondPersonText(text: string) {
     .replace(/\bplayer\b/g, 'you');
 }
 
+function formatRecentHistory(history: ActionHistoryEntry[] = []) {
+  const recentTurns = history
+    .filter((turn) => turn.content.trim().length > 0)
+    .slice(-10)
+    .map((turn) => `${turn.role === 'user' ? 'Player' : 'Narrator'}: ${turn.content.trim()}`);
+
+  if (recentTurns.length === 0) {
+    return 'No prior turns available. Continue naturally from the current moment.';
+  }
+
+  return recentTurns.join('\n');
+}
+
 export async function generateSceneIntro(
   gameId: string,
   sceneId: string,
@@ -353,7 +371,7 @@ export async function generateSceneIntro(
     {
       role: 'system',
       content:
-        'You are a text-RPG narrator that always speaks in the second person. You must always refer to the player as "you" and "your", never as "player", "he", "she", "they", or by name. Scenes should be described in great detail, between 15 and 20 sentences in most cases. However, when the player takes an unimportant action, keep responses to 1-2 sentences. Always vividly describe the scene and its atmosphere to immerse the player. Do not mention hidden mechanics or exit vectors. Focus on sensory details and emotional tone to set the stage.'
+        'You are a text-RPG narrator that always speaks in the second person. You must always refer to the player as "you" and "your", never as "player", "he", "she", "they", or by name. Scenes should be described in great detail, between 15 and 20 sentences in most cases. However, when the player takes an unimportant action, keep responses to 1-2 sentences. Always vividly describe the scene and its atmosphere to immerse the player. Do not mention hidden mechanics or exit vectors. Focus on sensory details and emotional tone to set the stage. You must end with an unresolved hook inside the current moment. The last line must be a description of something in the environment or a description of something that is happening. Do not include any reflective or summarizing outro. Forbidden in the final 2 sentences: "as you walk away", "as you leave", "you cannot shake", "with that", "for now", "the day ahead", "legacy", "possibilities". The last line must not be a summary or recap of the scene or speculation about future events. It must be a present-tense description of something in the scene.'
     },
     { role: 'user', content: buildPlayerContext(players) },
     { role: 'user', content: `Scene title: ${scene.title}` },
@@ -381,6 +399,7 @@ export async function runSceneAction(
   gameId: string,
   game: GameDefinition,
   players: Awaited<ReturnType<typeof loadPlayers>>,
+  history: ActionHistoryEntry[] = [],
   userToken?: string
 ) {
   const scene = game.scenes[sceneId];
@@ -411,15 +430,21 @@ export async function runSceneAction(
     scene.exitVectors.find((vector) => matchesExitVector(trimmedInput, vector.matchExamples));
 
   if (!matchedExit) {
+    const recentHistory = formatRecentHistory(history);
+
     const freeformMessages: ChatMessage[] = [
       {
         role: 'system',
         content:
-          'You are a text-RPG narrator (AKA a DM or Dungeon Master). Describe the scene in great detail. You must always speak in second person and refer to the player as "you" and "your" only. Never refer to the player in third person. Do not move to another scene. Do not mention hidden mechanics. Scenes should be described in great detail, between 15 and 20 sentences in most cases. However, when the player takes an unimportant action, keep responses to 1-2 sentences. Always vividly describe the scene and its atmosphere to immerse the player.'
+          'You are a text-RPG narrator (AKA a DM or Dungeon Master). Continue from the exact latest moment in the current scene. Never restart, re-introduce, or recap the scene unless explicitly asked. You must always speak in second person and refer to the player as "you" and "your" only. Never refer to the player in third person. Do not move to another scene. Do not mention hidden mechanics.'
       },
       { role: 'user', content: buildPlayerContext(players) },
       { role: 'user', content: `Scene title: ${scene.title}` },
-      { role: 'user', content: `Scene setup: ${toSecondPersonText(scene.basePrompt)}` },
+      {
+        role: 'user',
+        content: `Scene context for continuity only (do not restate unless asked): ${toSecondPersonText(scene.basePrompt)}`
+      },
+      { role: 'user', content: `Recent conversation (oldest to newest):\n${recentHistory}` },
       { role: 'user', content: `Player action: ${trimmedInput}` },
       { role: 'user', content: toSecondPersonText(scene.onFreeformPrompt) }
     ];

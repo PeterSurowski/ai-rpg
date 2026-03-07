@@ -84,6 +84,9 @@ export async function initDb() {
   if (!gameColumns.some((column) => column.name === 'current_scene_id')) {
     await run('ALTER TABLE games ADD COLUMN current_scene_id TEXT;');
   }
+  if (!gameColumns.some((column) => column.name === 'current_scene_history_id')) {
+    await run('ALTER TABLE games ADD COLUMN current_scene_history_id INTEGER;');
+  }
 
   await run(`
     CREATE TABLE IF NOT EXISTS game_players (
@@ -98,5 +101,23 @@ export async function initDb() {
       UNIQUE(game_id, role),
       FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
     );
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS game_scene_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      game_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      scene_id TEXT NOT NULL,
+      scene_title TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `);
+
+  await run(`
+    CREATE INDEX IF NOT EXISTS idx_game_scene_history_game_user_id
+    ON game_scene_history (game_id, user_id, id);
   `);
 }

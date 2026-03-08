@@ -1,6 +1,7 @@
 .screen {
   width: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
   max-width: 430px;
   margin: 0 auto;
   padding: 1rem;
@@ -171,11 +172,45 @@
   border-radius: 12px;
   padding: 0.75rem;
   background-color: #000;
+  transition: opacity 0.22s ease;
+}
+
+.game-layout.scene-switching {
+  opacity: 0;
 }
 
 .game-screen {
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
+}
+
+@media (max-height: 760px) {
+  .game-screen {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .game-screen .nav {
+    padding: 0.4rem 0;
+  }
+
+  .game-screen .game-layout {
+    padding: 0.6rem;
+  }
+
+  .game-screen .action-form {
+    gap: 0.5rem;
+    margin-top: 0.35rem;
+  }
+
+  .game-screen .field textarea {
+    padding: 0.55rem;
+  }
+
+  .game-screen .primary,
+  .game-screen .ghost {
+    padding: 0.65rem;
+  }
 }
 
 .game-screen .content {

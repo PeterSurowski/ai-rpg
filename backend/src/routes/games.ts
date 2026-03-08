@@ -432,12 +432,19 @@ router.post('/:gameId/play/start', requireAuth, async (req, res) => {
 
   let history = await getSceneTurns(gameId, userId, currentEntry.id);
   if (history.length === 0) {
-    const intro = await generateSceneIntro(gameId, initialSceneId, loaded.game, loaded.players, bearerToken);
+    const intro = await generateSceneIntro(
+      gameId,
+      initialSceneId,
+      loaded.game,
+      loaded.players,
+      bearerToken,
+      loaded.assetBasePath
+    );
     await appendSceneTurn(gameId, userId, currentEntry.id, 'assistant', intro.text);
     history = [{ role: 'assistant', content: intro.text }];
   }
 
-  const snapshot = getSceneSnapshot(gameId, initialSceneId, loaded.game, bearerToken);
+  const snapshot = getSceneSnapshot(gameId, initialSceneId, loaded.game, bearerToken, loaded.assetBasePath);
   const navigationState = await getNavigationState(gameId, userId, currentEntry.id);
   return res.json({ ...snapshot, text: latestAssistantText(history), history, ...navigationState });
 });
@@ -488,7 +495,8 @@ router.post('/:gameId/play/action', requireAuth, async (req, res) => {
     loaded.game,
     loaded.players,
     priorHistory,
-    bearerToken
+    bearerToken,
+    loaded.assetBasePath
   );
 
   const trimmedInput = parsed.data.input.trim();
@@ -534,7 +542,14 @@ router.post('/:gameId/play/restart', requireAuth, async (req, res) => {
 
   const resetEntry = await resetSceneHistory(gameId, userId, restartSceneId, restartScene.title);
 
-  const response = await generateSceneIntro(gameId, restartSceneId, loaded.game, loaded.players, bearerToken);
+  const response = await generateSceneIntro(
+    gameId,
+    restartSceneId,
+    loaded.game,
+    loaded.players,
+    bearerToken,
+    loaded.assetBasePath
+  );
   await appendSceneTurn(gameId, userId, resetEntry.id, 'assistant', response.text);
   const history = await getSceneTurns(gameId, userId, resetEntry.id);
   const navigationState = await getNavigationState(gameId, userId, resetEntry.id);
@@ -568,12 +583,19 @@ router.post('/:gameId/play/back', requireAuth, async (req, res) => {
 
   let history = await getSceneTurns(gameId, userId, previousEntry.id);
   if (history.length === 0) {
-    const intro = await generateSceneIntro(gameId, previousEntry.scene_id, loaded.game, loaded.players, bearerToken);
+    const intro = await generateSceneIntro(
+      gameId,
+      previousEntry.scene_id,
+      loaded.game,
+      loaded.players,
+      bearerToken,
+      loaded.assetBasePath
+    );
     await appendSceneTurn(gameId, userId, previousEntry.id, 'assistant', intro.text);
     history = [{ role: 'assistant', content: intro.text }];
   }
 
-  const snapshot = getSceneSnapshot(gameId, previousEntry.scene_id, loaded.game, bearerToken);
+  const snapshot = getSceneSnapshot(gameId, previousEntry.scene_id, loaded.game, bearerToken, loaded.assetBasePath);
   const navigationState = await getNavigationState(gameId, userId, previousEntry.id);
   return res.json({ ...snapshot, text: latestAssistantText(history), history, ...navigationState });
 });
@@ -605,12 +627,19 @@ router.post('/:gameId/play/forward', requireAuth, async (req, res) => {
 
   let history = await getSceneTurns(gameId, userId, nextEntry.id);
   if (history.length === 0) {
-    const intro = await generateSceneIntro(gameId, nextEntry.scene_id, loaded.game, loaded.players, bearerToken);
+    const intro = await generateSceneIntro(
+      gameId,
+      nextEntry.scene_id,
+      loaded.game,
+      loaded.players,
+      bearerToken,
+      loaded.assetBasePath
+    );
     await appendSceneTurn(gameId, userId, nextEntry.id, 'assistant', intro.text);
     history = [{ role: 'assistant', content: intro.text }];
   }
 
-  const snapshot = getSceneSnapshot(gameId, nextEntry.scene_id, loaded.game, bearerToken);
+  const snapshot = getSceneSnapshot(gameId, nextEntry.scene_id, loaded.game, bearerToken, loaded.assetBasePath);
   const navigationState = await getNavigationState(gameId, userId, nextEntry.id);
   return res.json({ ...snapshot, text: latestAssistantText(history), history, ...navigationState });
 });

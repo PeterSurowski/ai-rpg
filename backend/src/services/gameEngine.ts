@@ -253,6 +253,30 @@ function resolveBackgroundUrl(gameId: string, backgroundImage?: string, userToke
   return `/api/games/${gameId}/assets/${encodedPath}${tokenSuffix}`;
 }
 
+function resolveSceneBackgroundPath(backgroundImage: string | undefined, assetBasePath?: string) {
+  if (!backgroundImage) {
+    return undefined;
+  }
+
+  const normalizedImage = path.posix.normalize(backgroundImage.replace(/\\/g, '/'));
+  const strippedImage = normalizedImage.replace(/^(?:assets|files)\//, '');
+
+  if (!assetBasePath) {
+    return strippedImage;
+  }
+
+  const normalizedBase = path.posix.normalize(assetBasePath).replace(/^\.?\//, '');
+  if (!normalizedBase || normalizedBase === '.') {
+    return strippedImage;
+  }
+
+  if (strippedImage.startsWith(`${normalizedBase}/`)) {
+    return strippedImage;
+  }
+
+  return path.posix.join(normalizedBase, strippedImage);
+}
+
 function resolveNextSceneId(next: z.infer<typeof nextSchema>, game: GameDefinition) {
   if (next.type === 'scene') {
     if (next.sceneId.startsWith('randomscene-')) {
@@ -314,11 +338,14 @@ export async function loadGameForUser(gameId: string, userId: string) {
 
   const parsedJson = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
   const game = gameDefinitionSchema.parse(parsedJson);
+  const assetBasePathRaw = path.relative(gameRecord.files_path, path.dirname(jsonPath)).replace(/\\/g, '/');
+  const assetBasePath = assetBasePathRaw && assetBasePathRaw !== '.' ? path.posix.normalize(assetBasePathRaw) : undefined;
 
   return {
     gameRecord,
     game,
-    players: await loadPlayers(gameId)
+    players: await loadPlayers(gameId),
+    assetBasePath
   };
 }
 
@@ -360,7 +387,8 @@ export async function generateSceneIntro(
   sceneId: string,
   game: GameDefinition,
   players: Awaited<ReturnType<typeof loadPlayers>>,
-  userToken?: string
+  userToken?: string,
+  assetBasePath?: string
 ) {
   const scene = game.scenes[sceneId];
   if (!scene) {
@@ -388,12 +416,22 @@ export async function generateSceneIntro(
     sceneId,
     sceneTitle: scene.title,
     text,
-    backgroundImageUrl: resolveBackgroundUrl(gameId, scene.backgroundImage, userToken),
+    backgroundImageUrl: resolveBackgroundUrl(
+      gameId,
+      resolveSceneBackgroundPath(scene.backgroundImage, assetBasePath),
+      userToken
+    ),
     ended: false
   };
 }
 
-export function getSceneSnapshot(gameId: string, sceneId: string, game: GameDefinition, userToken?: string) {
+export function getSceneSnapshot(
+  gameId: string,
+  sceneId: string,
+  game: GameDefinition,
+  userToken?: string,
+  assetBasePath?: string
+) {
   const scene = game.scenes[sceneId];
   if (!scene) {
     throw new Error(`Unknown scene '${sceneId}'.`);
@@ -402,7 +440,11 @@ export function getSceneSnapshot(gameId: string, sceneId: string, game: GameDefi
   return {
     sceneId,
     sceneTitle: scene.title,
-    backgroundImageUrl: resolveBackgroundUrl(gameId, scene.backgroundImage, userToken),
+    backgroundImageUrl: resolveBackgroundUrl(
+      gameId,
+      resolveSceneBackgroundPath(scene.backgroundImage, assetBasePath),
+      userToken
+    ),
     ended: false
   };
 }
@@ -414,7 +456,8 @@ export async function runSceneAction(
   game: GameDefinition,
   players: Awaited<ReturnType<typeof loadPlayers>>,
   history: ActionHistoryEntry[] = [],
-  userToken?: string
+  userToken?: string,
+  assetBasePath?: string
 ) {
   const scene = game.scenes[sceneId];
   if (!scene) {
@@ -434,7 +477,11 @@ export async function runSceneAction(
       sceneId,
       sceneTitle: scene.title,
       text: hintText,
-      backgroundImageUrl: resolveBackgroundUrl(gameId, scene.backgroundImage, userToken),
+      backgroundImageUrl: resolveBackgroundUrl(
+        gameId,
+        resolveSceneBackgroundPath(scene.backgroundImage, assetBasePath),
+        userToken
+      ),
       ended: false
     };
   }
@@ -468,7 +515,11 @@ export async function runSceneAction(
       sceneId,
       sceneTitle: scene.title,
       text,
-      backgroundImageUrl: resolveBackgroundUrl(gameId, scene.backgroundImage, userToken),
+      backgroundImageUrl: resolveBackgroundUrl(
+        gameId,
+        resolveSceneBackgroundPath(scene.backgroundImage, assetBasePath),
+        userToken
+      ),
       ended: false
     };
   }
@@ -497,7 +548,11 @@ export async function runSceneAction(
       sceneId,
       sceneTitle: scene.title,
       text,
-      backgroundImageUrl: resolveBackgroundUrl(gameId, scene.backgroundImage, userToken),
+      backgroundImageUrl: resolveBackgroundUrl(
+        gameId,
+        resolveSceneBackgroundPath(scene.backgroundImage, assetBasePath),
+        userToken
+      ),
       ended: true
     };
   }
@@ -527,7 +582,11 @@ export async function runSceneAction(
     sceneId: nextSceneId,
     sceneTitle: nextScene.title,
     text,
-    backgroundImageUrl: resolveBackgroundUrl(gameId, nextScene.backgroundImage, userToken),
+    backgroundImageUrl: resolveBackgroundUrl(
+      gameId,
+      resolveSceneBackgroundPath(nextScene.backgroundImage, assetBasePath),
+      userToken
+    ),
     ended: false
   };
 }

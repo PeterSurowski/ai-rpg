@@ -2,6 +2,7 @@
   width: 100%;
   min-height: 100vh;
   min-height: 100dvh;
+  min-height: 100svh;
   max-width: 430px;
   margin: 0 auto;
   padding: 1rem;
@@ -182,6 +183,8 @@
 .game-screen {
   height: 100vh;
   height: 100dvh;
+  height: 100svh;
+  max-height: 100svh;
   overflow: hidden;
 }
 
@@ -210,6 +213,13 @@
   .game-screen .primary,
   .game-screen .ghost {
     padding: 0.65rem;
+  }
+}
+
+@supports (height: 100dvh) {
+  .game-screen {
+    height: 100dvh;
+    max-height: 100dvh;
   }
 }
 
